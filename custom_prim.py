@@ -33,7 +33,7 @@ def normal_v(line):
     # Unit normal vector
     unit_normal = normal / np.linalg.norm(normal)
 
-    return unit_normal
+    return [a for a in unit_normal]
         
 def access(grid, pos:list):
     return grid[pos[1]][pos[0]]

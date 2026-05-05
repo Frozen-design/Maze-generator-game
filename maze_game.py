@@ -78,7 +78,7 @@ class Ball:
         for index, a in enumerate(lines):
             line_a = LineString(a)
             collision_point = motion.intersection(line_a)
-            if collision_point:
+            if collision_point and isinstance(collision_point, Point):
                 colliding_points.append([collision_point.x, collision_point.y])
                 line_indices.append(index)
 
@@ -112,10 +112,10 @@ class Ball:
             new_pos = new_motion.intersection(new_collision_line)
             opp_pos = new_motion.intersection(opp_collision_line)
 
-            if new_pos:
+            if new_pos and isinstance(new_pos, Point):
                 self.pos = [new_pos.x, new_pos.y]
                 return
-            elif opp_pos:
+            elif opp_pos and isinstance(opp_pos, Point):
                 self.pos = [opp_pos.x, opp_pos.y]
                 return
         else:
