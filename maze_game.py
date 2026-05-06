@@ -37,15 +37,6 @@ class Ball:
     def draw(self, surface, color):
         pygame.draw.circle(surface, color, self.pos, self.radius)
 
-    def line_collision(self, line):
-        line = LineString(line)
-        self.center = Point(self.pos)
-        self.circle = self.center.buffer(self.radius)
-        intersection = line.intersection(self.circle)
-        if intersection:
-            return True
-        else:
-            return False
 
     def update_velocity(self, pos1):
         def function_speed(x):
@@ -58,65 +49,53 @@ class Ball:
         self.speed = function_speed(mag)
         self.velocity = [a * self.speed for a in direction]
 
-    def maze_nav(self, mp, lines):
-        self.update_velocity(mp)
-        pos = add(self.pos, self.velocity)
-        ball = Ball(pos, self.radius)
-        if not any([ball.line_collision(a) for a in lines]):
-            self.pos = pos
-
-    # if position is across a line, set final position to on the line
-    # then if collision:
-    #   get normal vector of line
-    #   copy and move line by radius * normal vector
-    #   treat line like infinite line
-    #   move ball to intersection 
     def better_nav(self, lines):
-        pos = add(self.pos, self.velocity)
-        motion = LineString([self.pos, pos])
-        #new_ball = Ball(pos, self.radius)
+        dimensions = 2
+        collision_check = 0
+        points_hit = []
+        P0 = np.array([self.pos[0], self.pos[1], 0])
+        V = np.array([self.velocity[0], self.velocity[1], 0])
+        for i in lines:
+            #if collision_check >= 2:
+                #V = np.array([0, 0, 0])
 
-        # Find every line that the motion of the ball intersects with
-        colliding_points = []
-        line_indices = []
-        
-        for index, a in enumerate(lines):
-            line_a = LineString(a)
-            m_collision_p = motion.intersection(line_a)
-            #b_c_l = new_ball.circle.intersection(line_a)
-            if m_collision_p and isinstance(m_collision_p, Point):
-                colliding_points.append([m_collision_p.x, m_collision_p.y])
-                line_indices.append(index)   
-            
-        if len(colliding_points) > 0:
-            # Find the line index and closest collision point based off of the distance to the collision point. 
-            min_distance = math.dist(self.pos, colliding_points[0])
-            closest_point = colliding_points[0]
-            line_index = line_indices[0]
-            for i in range(len(colliding_points)):
-                # replace stats when the distance is less than the current minimum distance
-                distance = math.dist(self.pos, colliding_points[i])
-                if min_distance > distance:
-                    min_distance = distance
-                    closest_point = colliding_points[i]
-                    line_index = line_indices[i]
+            A = np.array([i[0][0], i[0][1], 0])
+            B = np.array([i[1][0], i[1][1], 0])
+            E = B - A
+            W = P0 - A
+            j = np.linalg.norm(np.cross(V, E))**2
+            k = 2 * (np.dot(np.cross(W, E), np.cross(V, E)))
+            l = (np.linalg.norm(np.cross(W, E))**2) - ((self.radius**2) * (np.linalg.norm(E)**2))
+            if (k**2 - 4 * j * l) < 0:
+                continue
+            else:
+                t = (-k - math.sqrt(k**2 - 4 * j * l)) / (2 * j)
+                if 0 <= t <= 1:
+                    phit = P0 + t * V
+                    u = np.dot(phit - A, E) / np.dot(E, E) 
+                    if 0 <= u <= 1:
+                        n = phit - (A + (u * E))
+                        n_1 = n / np.linalg.norm(n)
+                        points_hit.append({"phit": phit, "normal": n_1})
+                        collision_check += 1                    
 
-            # Find which line the closest intersection occurs
-            collision_line = lines[line_index]
-            # Find the perpendicular vector of the line
-            line_normal = normal_v(collision_line)
-            facing_eachother = np.dot(self.velocity, line_normal)
-            new_pos = None
-            if facing_eachother < 0:
-                new_pos = add(closest_point, line_normal)
-            elif facing_eachother > 0:
-                line_normal = mult(line_normal, -1)
-                new_pos = add(closest_point, line_normal)
-            if new_pos:
-                self.update(new_pos)
-            return
+        if collision_check == 0:
+            self.update([P0[a] + V[a] for a in range(dimensions)])
         else:
-            self.pos = pos
+            avg = np.array([0, 0, 0])
+            minimum_point = points_hit[0]["phit"]
+            min_dist = math.dist(P0, minimum_point)
+            for i in points_hit:
+                avg = avg + i["normal"]
+                dist = math.dist(P0, i["phit"])
+                if min_dist > dist:
+                    min_dist = dist
+                    minimum_point = i["phit"]
+            avg_normal = avg / np.linalg.norm(avg)
+            avg_radius = avg_normal * self.radius
+            new_pos = minimum_point + avg_radius
+            self.update([new_pos[a] for a in range(dimensions)])
+        return
 
 def add_mouse_queue(mouseq, pos):
     if len(mouseq) >= 2:
