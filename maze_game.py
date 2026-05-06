@@ -12,14 +12,13 @@ def extend_line(line):
 
 class Button:
     def __init__(self, x, y, width, height):
-        self.x, self.y = x, y
-        self.width, self.height = width, height
+        self.rect = pygame.Rect(x, y, width, height)
 
     def check_click(self, pos):
-        return self.x < pos[0] < self.x + self.width and self.y < pos[1] < self.y + self.height
+        return self.rect.collidepoint(pos)
 
     def draw(self, surface, color):
-        pygame.draw.rect(surface, color, (self.x, self.y, self.width, self.height))
+        pygame.draw.rect(surface, color, self.rect)
 
 class Ball:
     def __init__(self, pos, radius):
@@ -109,10 +108,10 @@ class Ball:
             facing_eachother = np.dot(self.velocity, line_normal)
             new_pos = None
             if facing_eachother < 0:
-                new_pos = add(closest_point, mult(line_normal, self.radius))
+                new_pos = add(closest_point, line_normal)
             elif facing_eachother > 0:
                 line_normal = mult(line_normal, -1)
-                new_pos = add(closest_point, mult(line_normal, self.radius))
+                new_pos = add(closest_point, line_normal)
             if new_pos:
                 self.update(new_pos)
             return
@@ -134,6 +133,7 @@ def update_lines(lines_1, x0, y0, width, height, scale, maze):
 
 def main():
     pygame.init()
+    pygame.font.init()
     screen = pygame.display.set_mode((1000, 1000))
     clock = pygame.time.Clock()
     running = True
@@ -143,8 +143,11 @@ def main():
     mouse = pygame.mouse
 
     restart_button = Button(100, 40, 50, 20)
+    font = pygame.font.Font(None, size = 16)
+    text_restart = font.render("Restart", True, "Dark Gray")
+    rect_restart = text_restart.get_rect(center = restart_button.rect.center)
 
-    width, height = 30, 30
+    width, height = 10, 10
     x0, y0 = 100, 100
     scale = 800 // width
     margin = scale // 3
@@ -179,10 +182,11 @@ def main():
 
         screen.fill("black")
         restart_button.draw(screen, "red")
+        screen.blit(text_restart, rect_restart)
         start_trigger.draw(screen, "light green")
         end_trigger.draw(screen, "pink")
         for i in lines:
-            pygame.draw.line(screen, "white", i[0], i[1], width=2)
+            pygame.draw.line(screen, "Dark Gray", i[0], i[1], width=2)
         if len(mouse_pos) == 2:
             pygame.draw.line(screen, "red", *mouse_pos)
 
