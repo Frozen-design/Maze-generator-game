@@ -8,8 +8,7 @@ def extend_line(line):
     dx = p2[0] - p1[0]
     dy = p2[1] - p1[1]
     # Extending by a large factor
-    return LineString([(p1[0] - 1000*dx, p1[1] - 1000*dy),
-                        (p1[0] + 1000*dx, p1[1] + 1000*dy)])
+    return LineString([(p1[0] - 1000*dx, p1[1] - 1000*dy), (p1[0] + 1000*dx, p1[1] + 1000*dy)])
 
 class Button:
     def __init__(self, x, y, width, height):
@@ -31,6 +30,11 @@ class Ball:
         self.circle = self.center.buffer(self.radius)
         self.speed = 10
 
+    def update(self, pos):
+        self.pos = pos
+        self.center = Point(pos)
+        self.circle = self.center.buffer(self.radius)
+
     def draw(self, surface, color):
         pygame.draw.circle(surface, color, self.pos, self.radius)
 
@@ -47,7 +51,7 @@ class Ball:
     def update_velocity(self, pos1):
         def function_speed(x):
             if x > 1:
-                return (10*(math.exp(-10/(x-1))))
+                return (100*(math.exp(-50/(x-1))))
             else:
                 return 0
         mag = math.dist(self.pos, pos1)
@@ -71,17 +75,19 @@ class Ball:
     def better_nav(self, lines):
         pos = add(self.pos, self.velocity)
         motion = LineString([self.pos, pos])
+        #new_ball = Ball(pos, self.radius)
 
         # Find every line that the motion of the ball intersects with
         colliding_points = []
         line_indices = []
+        
         for index, a in enumerate(lines):
             line_a = LineString(a)
-            collision_point = motion.intersection(line_a)
-            if collision_point and isinstance(collision_point, Point):
-                colliding_points.append([collision_point.x, collision_point.y])
-                line_indices.append(index)
-
+            m_collision_p = motion.intersection(line_a)
+            #b_c_l = new_ball.circle.intersection(line_a)
+            if m_collision_p and isinstance(m_collision_p, Point):
+                colliding_points.append([m_collision_p.x, m_collision_p.y])
+                line_indices.append(index)   
             
         if len(colliding_points) > 0:
             # Find the line index and closest collision point based off of the distance to the collision point. 
@@ -100,24 +106,16 @@ class Ball:
             collision_line = lines[line_index]
             # Find the perpendicular vector of the line
             line_normal = normal_v(collision_line)
-            # Add the normal vector times the distance of the radius to the line and then extend the line to account for edge cases
-            new_collision_line = extend_line([add(a, mult(line_normal, self.radius)) for a in collision_line])
-            opp_collision_line = extend_line([add(a, mult(line_normal, -self.radius)) for a in collision_line])
-            # Find the new position of the ball
-            new_motion = LineString([self.pos, closest_point])
-            if math.dist(*new_motion.coords) < self.radius:
-                return
-            
-            # Check both sides of the line
-            new_pos = new_motion.intersection(new_collision_line)
-            opp_pos = new_motion.intersection(opp_collision_line)
-
-            if new_pos and isinstance(new_pos, Point):
-                self.pos = [new_pos.x, new_pos.y]
-                return
-            elif opp_pos and isinstance(opp_pos, Point):
-                self.pos = [opp_pos.x, opp_pos.y]
-                return
+            facing_eachother = np.dot(self.velocity, line_normal)
+            new_pos = None
+            if facing_eachother < 0:
+                new_pos = add(closest_point, mult(line_normal, self.radius))
+            elif facing_eachother > 0:
+                line_normal = mult(line_normal, -1)
+                new_pos = add(closest_point, mult(line_normal, self.radius))
+            if new_pos:
+                self.update(new_pos)
+            return
         else:
             self.pos = pos
 

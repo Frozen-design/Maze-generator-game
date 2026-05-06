@@ -34,6 +34,11 @@ def normal_v(line):
     unit_normal = normal / np.linalg.norm(normal)
 
     return [a for a in unit_normal]
+
+def midpoint_of_line(line):
+    p, q = line
+    midpoint = [((p[0] + q[0])/2), ((p[1] + q[1])/2)]
+    return midpoint
         
 def access(grid, pos:list):
     return grid[pos[1]][pos[0]]
