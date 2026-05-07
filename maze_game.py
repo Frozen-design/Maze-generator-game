@@ -2,6 +2,7 @@ from custom_prim import *
 import pygame
 from shapely.geometry import Point, LineString
 import math
+import time
 
 def extend_line(line):
     p1, p2 = line
@@ -49,16 +50,13 @@ class Ball:
         self.speed = function_speed(mag)
         self.velocity = [a * self.speed for a in direction]
 
-    def better_nav(self, lines):
+    def better_nav(self, surface, lines):
         dimensions = 2
         collision_check = 0
         points_hit = []
         P0 = np.array([self.pos[0], self.pos[1], 0])
         V = np.array([self.velocity[0], self.velocity[1], 0])
         for i in lines:
-            #if collision_check >= 2:
-                #V = np.array([0, 0, 0])
-
             A = np.array([i[0][0], i[0][1], 0])
             B = np.array([i[1][0], i[1][1], 0])
             E = B - A
@@ -67,7 +65,7 @@ class Ball:
             k = 2 * (np.dot(np.cross(W, E), np.cross(V, E)))
             l = (np.linalg.norm(np.cross(W, E))**2) - ((self.radius**2) * (np.linalg.norm(E)**2))
             if (k**2 - 4 * j * l) < 0:
-                continue
+                pass
             else:
                 t = (-k - math.sqrt(k**2 - 4 * j * l)) / (2 * j)
                 if 0 <= t <= 1:
@@ -76,31 +74,41 @@ class Ball:
                     if 0 <= u <= 1:
                         n = phit - (A + (u * E))
                         n_1 = n / np.linalg.norm(n)
-                        points_hit.append({"phit": phit, "normal": n_1})
-                        collision_check += 1                    
+                        points_hit.append({"phit": phit + n_1 * 0.001, "normal": n_1})
+                        collision_check += 1
+            if collision_check == 0:
+                for p in i:
+                    p_1 = np.array([p[0], p[1], 0])
+                    w = p_1 - P0
+                    a = np.dot(-V, -V)
+                    b = 2 * np.dot(-V, w)
+                    c = np.dot(w, w) - (self.radius ** 2)
+                    D = b**2 - 4 * a * c
+                    if D < 0:
+                        pass
+                    else:
+                        t1, t2 = (-b - math.sqrt(D)) / (2 * a), (-b + math.sqrt(D)) / (2 * a)
+                        t = min (t1, t2)
+                        if 0 <= t <= 1:
+                            phit = P0 + t * V
+                            n = phit - p_1
+                            n_1 = n /np.linalg.norm(n)
+                            points_hit.append({"phit": phit + n_1 * 0.001, "normal": n_1})
+                            collision_check += 1
 
         if collision_check == 0:
             self.update([P0[a] + V[a] for a in range(dimensions)])
-        else:
-            avg = np.array([0, 0, 0])
+        elif len(points_hit) > 0:
             minimum_point = points_hit[0]["phit"]
             min_dist = math.dist(P0, minimum_point)
             for i in points_hit:
-                avg = avg + i["normal"]
                 dist = math.dist(P0, i["phit"])
                 if min_dist > dist:
                     min_dist = dist
                     minimum_point = i["phit"]
-            avg_normal = avg / np.linalg.norm(avg)
-            avg_radius = avg_normal * self.radius
-            new_pos = minimum_point + avg_radius
-            self.update([new_pos[a] for a in range(dimensions)])
+            
+            self.update([minimum_point[a] for a in range(dimensions)])
         return
-
-def add_mouse_queue(mouseq, pos):
-    if len(mouseq) >= 2:
-        mouseq.pop(0)
-    mouseq.append(pos)
 
 def update_lines(lines_1, x0, y0, width, height, scale, maze):
         lines_1.clear()
@@ -117,8 +125,6 @@ def main():
     clock = pygame.time.Clock()
     running = True
 
-    mouse_pos = []
-    mouse_pos_list = []
     mouse = pygame.mouse
 
     restart_button = Button(100, 40, 50, 20)
@@ -134,6 +140,7 @@ def main():
     end_trigger = Button(x0 + (width-1)*scale + margin, y0 + (height-1)*scale + margin, scale-margin*2, scale-margin*2)
 
     maze = create_maze(width, height)
+    maze_button = Button(x0, y0, width*scale, height*scale)
     ball = Ball((x0 + scale/2, y0 + scale/2), 5)
     lines = []
 
@@ -141,23 +148,23 @@ def main():
     end_game = False
 
     while running:
-        if mouse.get_focused():
-            add_mouse_queue(mouse_pos, mouse.get_pos())
-            if not end_game:
-                ball.update_velocity(mouse.get_pos())
-                ball.better_nav(lines)
-        if end_trigger.check_click(ball.pos):
-            end_game = True
-
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             if event.type == pygame.MOUSEBUTTONUP:
                 if restart_button.check_click(event.pos):
                     maze = create_maze(width, height)
-                    ball = Ball((x0 + scale/2, y0 + scale/2), 5)
                     update_lines(lines, x0, y0, width, height, scale, maze)
+                    ball = Ball((x0 + scale/2, y0 + scale/2), 5)
                     end_game = False
+                    time.sleep(0.01)
+
+        if mouse.get_focused():
+            if not end_game:
+                ball.update_velocity(mouse.get_pos())
+                ball.better_nav(screen, lines)
+        if end_trigger.check_click(ball.pos):
+            end_game = True
 
         screen.fill("black")
         restart_button.draw(screen, "red")
@@ -166,9 +173,7 @@ def main():
         end_trigger.draw(screen, "pink")
         for i in lines:
             pygame.draw.line(screen, "Dark Gray", i[0], i[1], width=2)
-        if len(mouse_pos) == 2:
-            pygame.draw.line(screen, "red", *mouse_pos)
-
+        
         ball.draw(screen, "red")
         
         clock.tick(60)
