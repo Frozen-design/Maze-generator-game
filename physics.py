@@ -1,0 +1,128 @@
+import numpy as np
+import pygame
+
+class Main:
+    def __init__(self, fps) -> None:
+        self.fps = fps
+        self.gravity = 10.0 / fps
+        self.lines = [Line2D((0, 0), (1000, 0)), Line2D((1000, 1000), (-1000, 0)), Line2D((1000, 0), (0, 1000)), Line2D((0, 1000), (0, -1000))]
+        self.friction = 0.001
+        pass
+
+    def add_polygon(self, polygon):
+        for i in polygon.lines:
+            self.lines.append(i)
+
+class Ball2D:
+    def __init__(self, main:Main, start_xy:list | tuple, radius:float) -> None:
+        self.main = main
+        self.xy = np.array(start_xy)
+        self.radius = radius
+        self.velocity = np.array([0.0 for _ in range(len(self.xy))])
+        self.restitution = 0.99
+
+        pass
+    
+    def simulate(self, surface, steps):
+        self.velocity = self.velocity + (np.array([0.0, self.main.gravity])) / steps
+        for line in self.main.lines:
+            self.line_collision(surface, line)
+        self.xy += (self.velocity / steps)
+
+    def draw(self, surface, color):
+        pygame.draw.circle(surface, color, [*self.xy], self.radius)
+
+    def line_collision(self, surface, line):
+        # first point of line to center of ball
+        p = self.xy - line.xy
+
+        # distance along first line
+        distance_along_line = np.dot(self.xy - line.xy, line.direction_norm)
+
+        # change functionality depending on the distance along the line
+        if distance_along_line <= 0:
+            normal = p / np.linalg.norm(p)
+        elif distance_along_line >= np.linalg.norm(line.direction):
+            p = self.xy - (line.xy + line.direction)
+            normal = p / np.linalg.norm(p)
+        else:
+            normal = line.normal
+
+        if np.dot(self.velocity, normal) > 0:
+            normal = -normal 
+
+        #pygame.draw.
+        #pygame.draw.circle(surface, "blue", line.xy, 20)
+        #pygame.draw.line(surface, "black", line.xy, line.xy + normal*20, width = 5)
+        #pygame.draw.circle(surface, "red", line.xy, 10)
+
+        direction_norm = np.array([normal[1], -normal[0]])
+        #pygame.draw.line(surface, "orange", line.xy, line.xy + direction_norm*20, width = 5)
+        distance_from_line = np.dot(p, normal)
+        #if distance_from_line <= self.radius * 10:
+            #pygame.draw.circle(surface, "yellow", line.xy, distance_from_line)
+        
+        if 0 <= distance_from_line <= self.radius:
+            speed_along_normal = np.dot(self.velocity, normal)
+            speed_along_tangent = np.dot(self.velocity, direction_norm)
+            if speed_along_normal <= 0:
+                speed_along_normal *= self.restitution
+                speed_along_tangent *= 1 - self.main.friction
+                temp_speed = np.array([-speed_along_normal, speed_along_tangent])
+                self.velocity[0] = np.dot(temp_speed, normal)
+                self.velocity[1] = np.dot(temp_speed, direction_norm)
+
+class Line2D:
+    def __init__(self, point, direction) -> None:
+        self.xy = np.array(point)
+        self.x, self.y = point
+        self.direction = np.array(direction)
+        self.direction_norm = self.direction / np.linalg.norm(self.direction)
+        self.dx, self.dy = direction
+        self.normal = np.array([-self.dy, self.dx]) / np.linalg.norm(self.direction)
+        pass
+
+    @classmethod
+    def from_2_points(cls, p1, p2):
+        return cls(p1, [b-a for a, b in zip(p1, p2)])
+    
+    def draw(self, surface, color, width):
+        pygame.draw.line(surface, color, [*self.xy], [*(self.xy + self.direction)], width=width)
+
+class Polygon:
+    def __init__(self, points:list) -> None:
+        self.points = points
+        self.lines = [Line2D.from_2_points(self.points[a], self.points[(a+1)%len(self.points)]) for a in range(len(self.points))]
+        pass
+
+    def draw(self, surface, color):
+        pygame.draw.polygon(surface, color, self.points)
+
+def loop():
+    pygame.init()
+    screen = pygame.display.set_mode((1000, 1000))
+    clock = pygame.time.Clock()
+    running = True
+    main_sim = Main(60)
+    my_polygon = Polygon([[200, 200], [100, 600], [500, 800], [300, 200]])
+    main_sim.add_polygon(my_polygon)
+    ball1 = Ball2D(main_sim, (500.0, 400.0), 10)
+    ball1.velocity = [10, 10]
+
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+        screen.fill("light blue")
+        steps = 20
+        for _ in range(steps):
+            ball1.simulate(screen, steps)
+        ball1.draw(screen, "black")
+        for i in main_sim.lines:
+            i.draw(screen, "green", 3)
+
+        pygame.display.flip()
+        clock.tick(60)
+
+if __name__ == "__main__":
+    loop()
