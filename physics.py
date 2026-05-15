@@ -51,16 +51,8 @@ class Ball2D:
         if np.dot(self.velocity, normal) > 0:
             normal = -normal 
 
-        #pygame.draw.
-        #pygame.draw.circle(surface, "blue", line.xy, 20)
-        #pygame.draw.line(surface, "black", line.xy, line.xy + normal*20, width = 5)
-        #pygame.draw.circle(surface, "red", line.xy, 10)
-
         direction_norm = np.array([normal[1], -normal[0]])
-        #pygame.draw.line(surface, "orange", line.xy, line.xy + direction_norm*20, width = 5)
         distance_from_line = np.dot(p, normal)
-        #if distance_from_line <= self.radius * 10:
-            #pygame.draw.circle(surface, "yellow", line.xy, distance_from_line)
         
         if 0 <= distance_from_line <= self.radius:
             speed_along_normal = np.dot(self.velocity, normal)
