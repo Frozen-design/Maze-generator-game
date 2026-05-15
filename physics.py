@@ -6,12 +6,21 @@ class Main:
         self.fps = fps
         self.gravity = 10.0 / fps
         self.lines = [Line2D((0, 0), (1000, 0)), Line2D((1000, 1000), (-1000, 0)), Line2D((1000, 0), (0, 1000)), Line2D((0, 1000), (0, -1000))]
+        self.balls = []
         self.friction = 0.001
         pass
 
     def add_polygon(self, polygon):
         for i in polygon.lines:
             self.lines.append(i)
+
+    def add_ball(self, ball):
+        self.balls.append(ball)
+
+    def simulate(self):
+        steps = 30
+        for i in range(len(self.balls)):
+            self.balls[i].simulate(20)
 
 class Ball2D:
     def __init__(self, main:Main, start_xy:list | tuple, radius:float) -> None:
@@ -23,16 +32,20 @@ class Ball2D:
 
         pass
     
-    def simulate(self, surface, steps):
-        self.velocity = self.velocity + (np.array([0.0, self.main.gravity])) / steps
-        for line in self.main.lines:
-            self.line_collision(surface, line)
-        self.xy += (self.velocity / steps)
+    def simulate(self, steps):
+        for _ in range(steps):
+            self.velocity = self.velocity + (np.array([0.0, self.main.gravity])) / steps
+            for line in self.main.lines:
+                self.line_collision(line)
+            for ball in self.main.balls:
+                if ball is not self:
+                    self.ball_collision(ball)
+            self.xy += (self.velocity / steps)
 
     def draw(self, surface, color):
         pygame.draw.circle(surface, color, [*self.xy], self.radius)
 
-    def line_collision(self, surface, line):
+    def line_collision(self, line):
         # first point of line to center of ball
         p = self.xy - line.xy
 
@@ -63,6 +76,24 @@ class Ball2D:
                 temp_speed = np.array([-speed_along_normal, speed_along_tangent])
                 self.velocity[0] = np.dot(temp_speed, normal)
                 self.velocity[1] = np.dot(temp_speed, direction_norm)
+
+    def ball_collision(self, other):
+        distance = np.linalg.norm(self.xy - other.xy)
+        if distance > (self.radius + other.radius):
+            return
+        
+        if distance <= (self.radius + other.radius):
+            normal = (self.xy - other.xy) / distance
+            tangent = np.array([normal[1], -normal[0]])
+            relative_speed_along_normal = np.dot(self.velocity - other.velocity, normal)
+            relative_speed_along_tangent = np.dot(self.velocity - other.velocity, tangent)
+            force = relative_speed_along_tangent / 2 * tangent * self.main.friction
+            force = force + (relative_speed_along_normal * normal) * self.restitution
+            force = force + (relative_speed_along_normal/2 * normal) * (1 - self.restitution)
+            self.velocity = self.velocity - force
+            other.velocity = other.velocity + force
+            if distance < (self.radius + other.radius):
+                self.xy += normal * - (distance - (self.radius + other.radius)) / 2
 
 class Line2D:
     def __init__(self, point, direction) -> None:
@@ -98,18 +129,18 @@ def loop():
     main_sim = Main(60)
     my_polygon = Polygon([[200, 200], [100, 600], [500, 800], [300, 200]])
     main_sim.add_polygon(my_polygon)
-    ball1 = Ball2D(main_sim, (500.0, 400.0), 10)
-    ball1.velocity = [10, 10]
+    for i in range(10):
+        main_sim.add_ball(Ball2D(main_sim, (100*i+40, 100.0), 30))
+    
 
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
         screen.fill("light blue")
-        steps = 20
-        for _ in range(steps):
-            ball1.simulate(screen, steps)
-        ball1.draw(screen, "black")
+        main_sim.simulate()
+        for i in main_sim.balls:
+            i.draw(screen, "black")
         for i in main_sim.lines:
             i.draw(screen, "green", 3)
 
