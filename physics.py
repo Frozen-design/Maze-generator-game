@@ -1,17 +1,24 @@
+from __future__ import annotations
 import numpy as np
 import pygame
 import math
+from shapely.geometry import Point, LineString
+
+# 90 degrees clockwise
+def normal2D(vector):
+    return np.array([-vector[1], vector[0]])
 
 class Main:
     def __init__(self, fps) -> None:
         self.fps = fps
-        self.steps = 10
+        self.steps = 5
         self.dt = 1 / (self.fps * self.steps)
         self.gravity = np.array([0.0, 360.0])
         self.lines = [Line2D((0, 0), (1000, 0)), Line2D((1000, 1000), (-1000, 0)), Line2D((1000, 0), (0, 1000)), Line2D((0, 1000), (0, -1000))]
-        self.balls = []
-        self.springs = []
+        self.balls:list[Ball2D] = []
+        self.springs:list[Spring] = []
         self.friction = 0.001
+        self.quadtree:QuadTree | None = None
         pass
 
     def add_polygon(self, polygon):
@@ -22,12 +29,86 @@ class Main:
         self.balls.append(ball)
 
     def simulate(self):
+        wh = pygame.display.get_window_size()
         for _ in range(self.steps):
+            qt = QuadTree(Rect2D((wh[0]//2, wh[1]//2), wh[0]//2, wh[1]//2), 2)
             for i in range(len(self.balls)):
-                self.balls[i].simulate()
+                b = self.balls[i]
+                qt.insert(Point2D(b.xy[0], b.xy[1], b))
+                b.simulate(qt)
+            self.quadtree = qt
 
             for i in self.springs:
                 i.simulate()
+
+class Point2D:
+    def __init__(self, x, y, data) -> None:
+        self.x = x
+        self.y = y
+        self.data = data
+        pass
+
+class Rect2D:
+    def __init__(self, center, width, height) -> None:
+        self.center = center
+        self.x, self.y = center
+        self.width = width
+        self.height = height
+        self.rect = pygame.Rect(0, 0, self.width*2, self.height*2)
+        self.rect.center = self.center
+    
+    def intersects(self, other: Rect2D):
+        return self.rect.colliderect(other.rect)
+    
+    def contains(self, point:Point2D):
+        return self.rect.collidepoint((point.x, point.y))
+
+class QuadTree:
+    def __init__(self, boundary:Rect2D, capacity) -> None:
+        self.boundary = boundary
+        self.x, self.y = boundary.x, boundary.y
+        self.width, self.height = boundary.width, boundary.height
+        self.capacity = capacity
+        self.points:list[Point2D] = []
+        self.divided = False
+        #topleft, topright, bottomright, bottomleft
+        self.quadtrees = []
+
+    def divide(self):
+        self.divided = True
+        topleft = QuadTree(Rect2D((self.x - self.width/2, self.y - self.height/2), self.width/2, self.height/2), self.capacity)
+        topright = QuadTree(Rect2D((self.x + self.width/2, self.y - self.height/2), self.width/2, self.height/2), self.capacity)
+        bottomright = QuadTree(Rect2D((self.x + self.width/2, self.y + self.height/2), self.width/2, self.height/2), self.capacity)
+        bottomleft = QuadTree(Rect2D((self.x - self.width/2, self.y + self.height/2), self.width/2, self.height/2), self.capacity)
+        self.quadtrees = [topleft, topright, bottomright, bottomleft]
+    
+    def insert(self, point):
+        if self.boundary.contains(point) == False:
+            return
+        if len(self.points) < self.capacity:
+            self.points.append(point)
+        else:
+            if not self.divided:
+                self.divide()
+            for i in self.quadtrees:
+                i.insert(point)
+
+    def query(self, range:Rect2D, point_list:list[Point2D]):
+        if self.boundary.intersects(range):
+            for p in self.points:
+                point_list.append(p)
+            if self.divided:
+                for qt in self.quadtrees:
+                    qt.query(range, point_list)
+            return True
+        else:
+            return False
+    
+    def show(self, surface):
+        pygame.draw.rect(surface, "white", self.boundary.rect, width = 2)
+        if self.divided:
+            for i in self.quadtrees:
+                i.show(surface)
 
 class Line2D:
     def __init__(self, point, direction) -> None:
@@ -62,17 +143,21 @@ class Ball2D:
         self.radius = radius
         self.velocity = np.array([0.0 for _ in range(len(self.xy))])
         self.restitution = 0.99
-
-        pass
     
-    def simulate(self):
+    def simulate(self, qt:QuadTree):
         
         self.velocity += self.main.gravity * self.main.dt
         for line in self.main.lines:
             self.line_collision(line)
-        for ball in self.main.balls:
-            if ball is not self:
-                self.ball_collision(ball)
+        points = []
+        qt.query(Rect2D([*self.xy], self.radius*2, self.radius*2), points)
+        for p in points:
+            if p.data is not self:
+                self.ball_collision(p.data)
+        #magnitude = np.linalg.norm(self.velocity)
+        #if magnitude > self.radius* 2 * self.main.steps:
+            #self.velocity = (self.velocity / magnitude) * self.radius*2 * self.main.steps
+        
         self.xy += self.velocity * self.main.dt
 
     def draw(self, surface, color):
@@ -109,6 +194,33 @@ class Ball2D:
                 temp_speed = np.array([-speed_along_normal, speed_along_tangent])
                 self.velocity[0] = np.dot(temp_speed, normal)
                 self.velocity[1] = np.dot(temp_speed, direction_norm)
+
+    def point_collision(self, point:list[int]):
+        V_TAN = self.velocity / np.linalg.norm(self.velocity)
+        V_N = normal2D(V_TAN)
+        P = np.array([*point])
+        Px = P - self.xy
+        dist_a = np.dot(Px, V_N)
+        if -self.radius < dist_a < self.radius:
+            pointc = np.dot(V_TAN, Px) * V_TAN
+            b = math.sqrt(self.radius**2 - dist_a **2)
+            N = pointc - V_TAN * b
+            if 0 <= np.dot(N, V_TAN) <= np.dot(self.velocity, V_TAN):
+                return [N, (N - P) / np.linalg.norm(N - P)]
+        return None
+    
+    def point_collision_list(self, points:list[list[int]]):
+        def pcl(ijk):
+            collision_point, _ = ijk
+            return np.linalg.norm(collision_point)
+        custom_list = []
+        for i in points:
+            entry = self.point_collision(i)
+            if entry != None:
+                custom_list.append(entry)
+        if len(custom_list) > 0:
+            closest_entry = min(custom_list, key = pcl)
+            closest_point, closest_normal = closest_entry
 
     def ball_collision(self, other): 
         distance = np.linalg.norm(self.xy - other.xy)
@@ -165,14 +277,14 @@ def loop():
     clock = pygame.time.Clock()
     running = True
     main_sim = Main(60)
-    my_polygon = Polygon([[200, 200], [100, 600], [500, 800], [300, 200]])
-    main_sim.add_polygon(my_polygon)
-    for i in range(25):
-        main_sim.add_ball(Ball2D(main_sim, (22*i+20, 100.0), 10))
+    #my_polygon = Polygon([[200, 200], [100, 600], [500, 800], [800, 100], [300, 200]])
+    #main_sim.add_polygon(my_polygon)
+    for i in range(50):
+        main_sim.add_ball(Ball2D(main_sim, (11*i+20, 50.0), 5))
+        main_sim.add_ball(Ball2D(main_sim, (11*i+22, 75.0), 5))
 
     for i in range(len(main_sim.balls)-1):
-        main_sim.springs.append(Spring(main_sim, main_sim.balls[i], main_sim.balls[i + 1], force = 10000))
-    
+        main_sim.springs.append(Spring(main_sim, main_sim.balls[i], main_sim.balls[i + 1], force = 100, damping=0.01))
 
     while running:
         for event in pygame.event.get():
@@ -180,6 +292,8 @@ def loop():
                 running = False
         screen.fill("light blue")
         main_sim.simulate()
+        if main_sim.quadtree != None:
+            main_sim.quadtree.show(screen)
         for i in main_sim.balls:
             i.draw(screen, "black")
         for i in main_sim.lines:
@@ -190,5 +304,12 @@ def loop():
         pygame.display.flip()
         clock.tick(60)
 
+def test():
+    main_sim = Main(60)
+    ball1 = Ball2D(main_sim, (0, 0), 10)
+    ball1.velocity = np.array([0, 10])
+    p1 = [0, 50]
+    print(ball1.point_collision(p1))
+
 if __name__ == "__main__":
-    loop()
+    test()
