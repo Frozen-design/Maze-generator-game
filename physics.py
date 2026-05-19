@@ -96,7 +96,8 @@ class QuadTree:
     def query(self, range:Rect2D, point_list:list[Point2D]):
         if self.boundary.intersects(range):
             for p in self.points:
-                point_list.append(p)
+                if range.contains(p):
+                    point_list.append(p)
             if self.divided:
                 for qt in self.quadtrees:
                     qt.query(range, point_list)
@@ -249,14 +250,14 @@ def loop():
     my_polygon = Polygon([[200, 200], [100, 600], [300, 200]])
     main_sim.add_polygon(my_polygon)
 
-    balls = np.zeros(shape=(4, 4), dtype=Ball2D)
+    balls = np.zeros(shape=(3, 20), dtype=Ball2D)
 
     for i in range(balls.shape[1]):
         for j in range(balls.shape[0]):
-            balls[j, i] = Ball2D(main_sim, (40*i + 200, 40*j + 20.0), 10)
+            balls[j, i] = Ball2D(main_sim, (40*i + 20, 40*j + 20.0), 10)
             balls[j, i].restitution = 0.9
             main_sim.add_ball(balls[j, i])
-
+    """
     for index, i in np.ndenumerate(balls):
         directions = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]
         for j in directions:
@@ -268,7 +269,7 @@ def loop():
                     main_sim.springs.append(Spring(main_sim, balls[y, x], balls[y + yd, x + xd], force = 10000, damping=5, thickness=1)) # type:ignore
             except:
                 pass
-    
+    """
     n_spring = None
     
     while running:
@@ -279,10 +280,11 @@ def loop():
                 if main_sim.quadtree != None:
                     points = []
                     main_sim.quadtree.query(Rect2D((event.pos[0], event.pos[1]), 10, 10), points)
-                    pc = min(points, key = lambda x: math.dist([x.x, x.y], event.pos))
-                    ball_pc = pc.data
-                    n_ball = Ball2D(main_sim, event.pos, 1)
-                    n_spring = Spring(main_sim, ball_pc, n_ball, length=0.1, force=1000, damping=1)
+                    if len(points) > 0: 
+                        pc = min(points, key = lambda x: math.dist([x.x, x.y], event.pos))
+                        ball_pc = pc.data
+                        n_ball = Ball2D(main_sim, event.pos, 1)
+                        n_spring = Spring(main_sim, ball_pc, n_ball, length=0.1, force=1000, damping=1)
             if event.type == pygame.MOUSEBUTTONUP:
                 n_spring = None
         if n_spring != None:
