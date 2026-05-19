@@ -11,7 +11,7 @@ def normal2D(vector):
 class Main:
     def __init__(self, fps) -> None:
         self.fps = fps
-        self.steps = 5
+        self.steps = 20
         self.dt = 1 / (self.fps * self.steps)
         self.gravity = np.array([0.0, 360.0])
         self.lines = [Line2D((0, 0), (1000, 0)), Line2D((1000, 1000), (-1000, 0)), Line2D((1000, 0), (0, 1000)), Line2D((0, 1000), (0, -1000))]
@@ -246,14 +246,15 @@ def loop():
     clock = pygame.time.Clock()
     running = True
     main_sim = Main(60)
-    my_polygon = Polygon([[200, 200], [100, 600], [500, 800], [800, 100], [300, 200]])
+    my_polygon = Polygon([[200, 200], [100, 600], [300, 200]])
     main_sim.add_polygon(my_polygon)
 
-    balls = np.zeros(shape=(3, 20), dtype=object)
+    balls = np.zeros(shape=(4, 4), dtype=Ball2D)
 
     for i in range(balls.shape[1]):
         for j in range(balls.shape[0]):
-            balls[j, i] = Ball2D(main_sim, (25*i + 200, 25*j + 20.0), 7)
+            balls[j, i] = Ball2D(main_sim, (40*i + 200, 40*j + 20.0), 10)
+            balls[j, i].restitution = 0.9
             main_sim.add_ball(balls[j, i])
 
     for index, i in np.ndenumerate(balls):
@@ -282,9 +283,8 @@ def loop():
                     ball_pc = pc.data
                     n_ball = Ball2D(main_sim, event.pos, 1)
                     n_spring = Spring(main_sim, ball_pc, n_ball, length=0.1, force=1000, damping=1)
-                if event.type == pygame.MOUSEBUTTONUP and n_spring != None:
-                    main_sim.springs.remove(n_spring)
-                    n_spring = None
+            if event.type == pygame.MOUSEBUTTONUP:
+                n_spring = None
         if n_spring != None:
             n_spring.node2.xy = np.array(pygame.mouse.get_pos())
             main_sim.springs.append(n_spring)
